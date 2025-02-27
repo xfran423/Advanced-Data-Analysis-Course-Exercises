@@ -1,0 +1,145 @@
+---
+title: "ADA hw 3"
+author: "Xavier Francis"
+date: "2025-01-30"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+# Generate data
+## random dates
+```{r}
+set.seed(42)
+date <- sample(seq(as.Date('2023-01-01'), as.Date('2025-01-20'), by = "day"), 400)
+
+```
+
+## Random measures for two separate groups
+Assume we have some knowledge of the typical sizes of individuals of both groups. We can generate random measures around a mean value with a set amount of variability (standard )
+```{r}
+# Set the seed for reproducibility
+set.seed(42)
+ 
+# Generate 1000 random numbers from a normal distribution
+mean_value <- 23
+sd_value <- 2
+num_samples <- 400
+random_numbers1 <- rnorm(num_samples, mean = mean_value, sd = sd_value)
+
+set.seed(42)
+mean_value2 <- 37
+sd_value2 <- 4
+#num_samples <- 400
+random_numbers2 <- rnorm(num_samples, mean = mean_value2, sd = sd_value2)
+
+
+```
+
+## Combine and randomize the two groups
+```{r}
+#combine the two groups
+measure <- c(random_numbers1, random_numbers2)
+
+
+#randomize the order of the values in the measure vector
+set.seed(42) # just to make it reproducible
+measure <- sample(measure)
+
+```
+
+## Generate random colors
+```{r}
+color <- rep(c("orange", "yellow"), each=200)
+
+
+#randomize the values in the color vector
+set.seed(42) # just to make it reproducible
+color <- sample(color)
+
+```
+
+
+## combine all data into single dataframe & write data
+```{r}
+#combine data into dataset
+data <- cbind.data.frame(date, measure, color)
+
+#write data 
+
+
+#write.csv(data, "C:/Users/Xmanf/Desktop/Advanced data analysis stuff/W03.randomdata_X.csv")
+
+
+
+```
+
+# Mess it up then reimport
+Outside of R, intentionally introduce mistakes or messiness into the data. Then reimport it here
+```{r}
+#import messed up data
+messy <- read_csv("W03.randomdata_messy.csv")
+
+```
+#possible sourcesm of error in the dataset
+color date FoRMAT outliers whitespace
+
+```{r}
+library(readxl)
+#rename data
+messy <- w03_randomdata_Roya_messy
+#find unique values in color column so we can find what values to fix
+unique(messy$color)
+#color fix. replace mispelling with correct color
+messy$color[messy$color == "oragne"] <- "orange"
+unique(messy$color)
+
+#take a look at date and measure to spot check for messed up/missing values
+messy$date
+(messy$measure)
+ 
+#check for NAs in measure
+is.na(messy$measure)
+
+#plot a boxplot to visualize data
+ggplot(data =messy, aes(y = measure)) + geom_boxplot()
+
+#restrict data within a reasonable range to get rid of obvious errors in the measure data points 
+reasonable <- subset(messy, messy$measure < 5000)
+
+#remove nas
+reasonable_no_na <- na.omit(reasonable)
+
+#reasonable_no_na <- reasonable[!(is.na(reasonable$measure)), ]
+
+
+library(lubridate)
+
+#convert character to date format
+reasonable_no_na$date.fixed <- as.Date(reasonable_no_na$date, format="%m/%d/%Y")
+
+
+```
+#Statistically compare measure for orange vs yellow
+```{r}
+head(data)
+
+ggplot(data =data, aes(x = color, y = measure)) + geom_boxplot()
+
+#t test
+t.test(measure ~ color, data = data)
+
+#anova
+oneway.test(measure ~ color, data = data, var.equal = TRUE)
+#p-value = 0.8777
+
+
+
+```
+
+
