@@ -1,0 +1,94 @@
+---
+title: "ADA_week_6_day_2"
+author: "Xavier Francis"
+date: "2025-02-18"
+output: html_document
+---
+
+
+
+#load packages
+```{r}
+library(tidyverse)
+library(car)
+#install.packages("ggbiplot")
+library(ggbiplot)
+library(factoextra)
+library(ggplot2)
+```
+
+```{r}
+whales_df <- read.csv("C:/Users/Xmanf/Desktop/Advanced data analysis stuff/whale_pca2.csv", header=TRUE, stringsAsFactors=FALSE)
+
+```
+
+```{r}
+
+names(whales_df) <- c("species", "longth", "weight_tons", "blubber_thickness", "fin_size","dive_depth", "swim_speed", "lung_capac", "gest_period", "lifespan")
+
+
+```
+
+
+# Run PCA
+We run the PCA with prcomp(). Because the variable scales are not all commensurable, it is important to scale them to equal variance." (scale=TRUE does this)
+```{r}
+whale.pca <- prcomp (~ . ,
+                    data=whales_df[2:10],
+                    na.action=na.omit,  # not actually necessary: we removed NA
+                    scale. = TRUE)
+
+whale.pca
+
+```
+## How much variation is explained by each dimension?
+Visualize eigenvalues (scree plot). Show the percentage of variances explained by each principal component.
+```{r}
+factoextra::fviz_eig(whale.pca)
+```
+
+
+## Extract the data from the pca output
+```{r}
+pca.summ <- summary(whale.pca)
+pca.summ
+names(pca.summ)
+pca.summ$importance
+pca.summ$importance[2,] #extract just the row with the percent explained by each dimension
+```
+
+## Plot as biplot
+```{r}
+ggbiplot::ggbiplot(whale.pca, obs.scale = 1, var.scale = 1,
+         groups = whales_df$species, 
+         ellipse = TRUE, circle = TRUE) +
+  scale_color_discrete(name = 'Whale Species') +
+  theme_minimal() +
+  theme(legend.direction = 'horizontal', legend.position = 'top') 
+```
+
+
+## Contribution of each variable  https://www.datacamp.com/tutorial/pca-analysis-r
+"The goal of the third visualization is to determine how much each variable is represented in a given component. Such a quality of representation is called the Cos2 and corresponds to the square cosine, and it is computed using the fviz_cos2 function. A low value means that the variable is not perfectly represented by that component. A high value, on the other hand, means a good representation of the variable on that component."
+```{r}
+factoextra::fviz_cos2(whale.pca, choice = "var", axes = 1)
+factoextra::fviz_cos2(whale.pca, choice = "var", axes = 2)
+#fviz_cos2(whale.pca, choice = "var", axes = 1:2)
+
+```
+
+#testing corelation 
+```{r}
+
+
+cor.test(whales_df$lifespan, whales_df$gest_period )
+cor.test(whales_df$swim_speed, whales_df$fin_size )
+
+
+
+cor.test(whales_df$dive_depth, whales_df$blubber_thickness )
+
+```
+
+
+

@@ -1,0 +1,121 @@
+---
+title: "ADA_Week_6_dim_red"
+author: "Xavier Francis"
+date: "2025-02-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+#install packages
+```{r}
+library(tidyverse)
+library(palmerpenguins)
+library(car)
+#install.packages("ggbiplot")
+library(ggbiplot)
+library(factoextra)
+```
+
+
+
+# Clean up data and rename with shorter column names
+```{r}
+data(penguins, package="palmerpenguins")
+glimpse(penguins)
+
+#shorten variable names (remove units) to simplify variable labels, create factors for character variables, and remove NA observations (causes problems with PCA)
+
+peng <- penguins %>%
+    rename(
+         bill_length = bill_length_mm, 
+         bill_depth = bill_depth_mm, 
+         flipper_length = flipper_length_mm, 
+         body_mass = body_mass_g
+         ) %>%
+  mutate(species = as.factor(species),
+         island = as.factor(island),
+         sex = as.factor(substr(sex,1,1))) %>%
+  filter(!is.na(bill_depth))
+
+glimpse(peng)
+head(peng)
+```
+
+
+# Run PCA
+We run the PCA with prcomp(). Because the variable scales are not all commensurable, it is important to scale them to equal variance." (scale=TRUE does this)
+```{r}
+peng.pca <- prcomp (~ bill_length + bill_depth + flipper_length + body_mass,
+                    data=peng,
+                    # not actually necessary: we removed NA
+                    na.action=na.omit,  
+                    scale. = TRUE)
+
+peng.pca
+
+```
+## How much variation is explained by each dimension?
+Visualize eigenvalues (scree plot). Show the percentage of variances explained by each principal component.
+```{r}
+factoextra::fviz_eig(peng.pca)
+```
+
+
+## Extract the data from the pca output
+```{r}
+pca.summ <- summary(peng.pca)
+pca.summ
+names(pca.summ)
+pca.summ$importance
+#extract just the row with the percent explained by each dimension
+pca.summ$importance[2,] 
+```
+
+## Plot as biplot
+https://rpubs.com/friendly/penguin-biplots
+"The results of a PCA can best be viewed as a biplot. This shows
+
+the observations in the space of PC1 and PC2. Data ellipses for each color show the within-species variation.
+the pengiun size variables are represented as vectors from the origin. The angles they make with the PC1 and PC2 axes reflect their correlations with the principal components.
+In the call to ggbiplot,
+
+groups = peng$species provides separate colors and point styles for the species.
+ellipse = TRUE causes a data ellipse to be drawn for each species. This shows the within-species correlations of the observation scores on PC1 & PC2.
+circle = TRUE draws a correlation circle, reflecting the fact that for all species combined, PC1 & PC2 are uncorrelated."
+```{r}
+ggbiplot::ggbiplot(peng.pca, obs.scale = 1, var.scale = 1,
+         groups = peng$species, 
+         ellipse = TRUE, circle = TRUE) +
+  scale_color_discrete(name = 'Penguin Species') +
+  theme_minimal() +
+  theme(legend.direction = 'horizontal', legend.position = 'top') 
+```
+General interpretation: https://www.datacamp.com/tutorial/pca-analysis-r
+"Three main pieces of information can be observed from the previous plot. 
+
+First, all the variables that are grouped together are positively correlated to each other... Then, the higher the distance between the variable and the origin, the better represented that variable is....Finally, variables that are negatively correlated are displayed to the opposite sides of the biplot’s origin. "
+
+Specific interpretation: https://rpubs.com/friendly/penguin-biplots
+"From this, we can see:
+
+These two principal components account for 68.8 + 19.3 = 88.1 % of the total variance of these four size variables.
+
+PC1 is largely determined by flipper length and body mass. We can interpret this as an overall measure of penguin size. On this dimension, Gentoos are the largest, by quite a lot, compared with Adelie and Chinstrap.
+
+PC2 is mainly determined by variation in the two beak variables: culmen length and depth. Chinstrap are lower than the other two species on culmen length and depth, but culmen length further distinguishes the Gentoos.
+
+## Contribution of each variable  https://www.datacamp.com/tutorial/pca-analysis-r
+"The goal of the third visualization is to determine how much each variable is represented in a given component. Such a quality of representation is called the Cos2 and corresponds to the square cosine, and it is computed using the fviz_cos2 function. A low value means that the variable is not perfectly represented by that component. A high value, on the other hand, means a good representation of the variable on that component."
+```{r}
+factoextra::fviz_cos2(peng.pca, choice = "var", axes = 1)
+factoextra::fviz_cos2(peng.pca, choice = "var", axes = 2)
+#fviz_cos2(peng.pca, choice = "var", axes = 1:2)
+
+```
+
+
