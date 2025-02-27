@@ -1,0 +1,224 @@
+---
+title: "ADA_HW_week4"
+author: "Xavier Francis"
+date: "2025-02-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load packages and import data with unknown true clusters
+```{r}
+library(tidyverse)
+
+kmean_thing <- read.csv("C:/Users/Xmanf/Desktop/Advanced data analysis stuff/w04.unknown.clusters.csv", header=TRUE, stringsAsFactors=FALSE)
+
+```
+
+#get a sense of the structure of the dataset
+```{r}
+
+glimpse(kmean_thing)
+```
+
+
+#visualization of raw data for initial investigation 
+```{r}
+
+#plot raw data using original clusters  
+ggplot(kmean_thing, aes(x = as.factor(cluster), y = height, fill = as.factor(cluster))) +
+  geom_violin(alpha = 0.5, show.legend = FALSE, fill = "gray") +
+  geom_boxplot(width = 0.05) +
+  theme(legend.position = "none") +
+  labs(x = "cluster", y = "height") +
+  theme_minimal() 
+  #scale_y_continuous(breaks = seq(0, 100, 50) +  
+     #coord_cartesian(ylim = c(0, 50))
+
+  #plot raw data without any clusters
+  ggplot(kmean_thing, aes(x = "", y = height)) +
+  geom_violin(alpha = 0.5, show.legend = FALSE, fill = "gray") +
+  geom_boxplot(width = 0.05) +
+  theme(legend.position = "none") +
+  labs(x = "cluster", y = "height") +
+  theme_minimal() 
+  
+  
+```
+#visualize data via a histogram to investigate possible clusters
+```{r}
+#Alternate to try and visualize possible clusters
+  ggplot(kmean_thing, aes(x = height)) +
+geom_histogram(color = "black", fill = "white", bins = 150)  
+  
+```
+#plot dendrogram
+```{r} 
+#Alternate to try and visualize possible clusters
+#install.packages("ggdendro")
+library(ggdendro)
+hc <- hclust(dist(kmean_thing$height), "ave")
+ggdendrogram(hc, rotate = TRUE, size =1)
+```
+
+#add cluster id and plot again
+```{r}
+#rename cluster column to initial cluster
+colnames(kmean_thing)[2] <- 'initial_cluster'
+
+#cluster data using kmeans
+kmean_thing.wclust <- cbind(kmean_thing, cluster = kmeans(kmean_thing$height, 5)$cluster)
+
+#visualize data as a violin plot with new clusters
+ggplot(kmean_thing.wclust, aes(x = as.factor(cluster), y =height, fill = as.factor(cluster))) +
+  geom_violin(trim = FALSE, fill = "gray") +
+  geom_boxplot(width = 0.05) +
+  theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5))
+
+```
+
+
+#kmeans parts
+```{r}
+names(kmeans(kmean_thing$height,5))
+kmeans(kmean_thing$height, 5)$size #how many values at each clusters
+kmeans(kmean_thing$height, 5)$centers # what is the center of each clsuter?
+```
+
+
+
+
+#create key for loop
+```{r}
+#create key for loop for creating randomized data
+KEY.loop <- c("Izzys", "Birthday", 0,6,2,4,1,9,9,7 )
+
+for(KEY in 1:length(KEY.loop)){#KEY = 1
+  loop.id <- KEY.loop[KEY]
+  print(loop.id)}
+  
+```
+#generate clusters of randomized data with particular mean and particular sd using loop
+```{r}
+KEY_means <- c(45.5,66,24,10,300,200,124,500)
+#set random parameters so theyre the same for each run
+sd_value <- 1
+num_samples <- 200
+master_random_numbers <- data.frame()
+#master_random_numbers <- c()
+for(k in 1:length(KEY_means)){ #k = 1
+  loop.mean <- KEY_means[k]
+  #set seed
+  set.seed(11)
+random_numbers <- rnorm(num_samples, mean = loop.mean, sd = sd_value)
+random_numbers <- as.data.frame(random_numbers)
+master_random_numbers <- rbind.data.frame(master_random_numbers, random_numbers)
+  #master_random_numbers <- c(master_random_numbers, random_numbers )
+}
+
+
+
+```
+
+#visualize randomized data
+```{r}
+
+ggplot(master_random_numbers, aes( y =random_numbers, x = "")) +
+  geom_violin(trim = FALSE, fill = "gray") +
+  geom_boxplot(width = 0.05) +
+  theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5))
+
+```
+
+
+#Kmeans calculation
+```{r}
+
+#KEY_means <- c(45.5,66,24,10,300,200,124,500)
+
+
+#obtain clusters from kmeans
+master_random_numbers_kmean <- cbind(master_random_numbers, cluster = kmeans(master_random_numbers$random_numbers, 8)$cluster)
+
+#visualize data with kmeans clusters
+ggplot(master_random_numbers_kmean, aes(x = as.factor(cluster), y =random_numbers, fill = as.factor(cluster))) +
+  geom_violin(trim = FALSE, fill = "gray") +
+  geom_boxplot(width = 0.05) +
+  theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5)) #+  
+     #coord_cartesian(ylim = c(0, 100))
+
+```
+
+#Test various methods to assess optimal number of clusters
+#Silhouette Method 
+```{r}
+
+library(factoextra)
+
+fviz_nbclust(master_random_numbers, kmeans, method = "silhouette") + 
+  ggtitle("Silhouette Method for Optimal k") 
+
+
+
+```
+
+#elbow method
+```{r}
+library(cluster)
+library(factoextra)
+
+#create plot of number of clusters vs total within sum of squares
+fviz_nbclust(master_random_numbers, kmeans, method = "wss") + 
+  #geom_vline(xintercept = 2, linetype = 2 ) + 
+  labs(subtitle = "Elbow method")
+```
+
+
+#gap stat method 
+```{r}
+
+set.seed(24)
+gap_stat <- cluster::clusGap(master_random_numbers, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
+
+factoextra::fviz_gap_stat(gap_stat)
+```
+# Here were randomly generating 2 columns of rand numbers 
+```{r}
+height <- c(170,120,10,300,375,200,42,500)
+measures <- as.data.frame(height)
+measures$width <- c(74,24,1,180, 207, 120, 10, 357)
+
+
+#set random parameters so theyre the same for each run
+sd_value <- 1
+num_samples <- 200
+master_random_numbers <- data.frame()
+#master_random_numbers <- c()
+for(k in 1:length(measures$height)){ #k = 1
+  loop.mean_height <- measures$height[k]
+  #could do loop.mean_height <- measures{k, 1}
+  loop.mean_width <- measures$width[k]
+  #set seed
+  set.seed(11)
+random_numbers_height <- rnorm(num_samples, mean = loop.mean_height, sd = sd_value)
+random_numbers_width <-pmax(rnorm(num_samples, mean = loop.mean_width, sd = sd_value),0)
+
+random_numbers_comb <- cbind.data.frame(random_numbers_height, random_numbers_width )
+
+master_random_numbers <- rbind.data.frame(master_random_numbers, random_numbers_comb)
+  #master_random_numbers <- c(master_random_numbers, random_numbers )
+}
+
+head(master_random_numbers)
+
+```
+
+
+
+
+
+
+
+

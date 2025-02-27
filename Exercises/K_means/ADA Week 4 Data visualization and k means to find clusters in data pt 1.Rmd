@@ -1,0 +1,108 @@
+---
+title: "ADAw04"
+author: "Xavier Francis"
+date: "2025-02-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+#load package & data
+```{r}
+library(tidyverse)
+
+clean <- read.csv("C:/Users/Xmanf/Desktop/Advanced data analysis stuff/W03.randomdata_X.csv", header=TRUE, stringsAsFactors=FALSE)
+
+```
+
+
+#visualize the data
+```{r}
+ggplot(clean,aes(x=color, y = measure, fill = color)) +
+         geom_boxplot() + 
+         theme(legend.position = "none")
+
+```
+#T test
+```{r}
+t.test(measure ~ color, data = clean, var.equal = TRUE)
+```
+#ANOVA
+```{r}
+one.way <- aov(measure ~ color, data = clean)
+summary(one.way)
+```
+
+#plot: boxplot plus raw data
+```{r}
+ggplot(clean, aes(x = color, y = measure, fill = color)) +
+  geom_boxplot() +
+  geom_point() +
+  theme(legend.position = "none")
+```
+#plot: boxplot plus raw data jittered for better visability
+```{r}
+ggplot(clean, aes(x = color, y = measure, fill = color)) +
+  geom_boxplot() +
+  geom_point(position = position_jitter(seed = 1, width = 0.2)) +
+  theme(legend.position = "none")
+```
+
+
+#plot violin
+```{r}
+ggplot(clean, aes(x = color, y = measure, fill = color)) +
+  geom_violin(alpha = 0.5) +
+  theme(legend.position = "none")
+```
+
+
+violin plot + jitter
+```{r}
+ggplot(clean, aes(x = color, y = measure, fill = color)) +
+  geom_violin(alpha = 0.5) +
+    geom_point(position = position_jitter(seed = 1, width = 0.2)) +
+
+  theme(legend.position = "none")
+```
+
+violin + dotplot
+```{r}
+ggplot(clean, aes(x = color, y = measure, fill = color)) +
+  geom_violin(alpha = 0.5) +
+geom_dotplot(binaxis = "y",
+             stackdir = "center",
+             dotsize = 0.5)
+  theme(legend.position = "none")
+```
+
+
+#split data by kmeans
+```{r}
+#Plots of the data suggest that each of these groups, oranage and yellow, have some grouping within them based on the shape of the violins and the distribution of the raw data points. Here we are using kmeans to identify cluster in the data
+
+
+kmeans(clean$measure, 2)
+
+kmeans(clean$measure,2)$cluster
+clean <- cbind(clean,cluster = kmeans(clean$measure, 2)$cluster)
+
+#t test to compare clusters
+t.test(measure ~ cluster, data = clean, var.equal = TRUE)
+
+```
+
+#visualize kmeans derived clusters
+```{r}
+ggplot(clean, aes(x = as.factor(cluster), y = measure, fill = cluster)) +
+  geom_violin(alpha = 0.5) +
+geom_dotplot(binaxis = "y",
+             stackdir = "center",
+             dotsize = 0.5)
+  theme(legend.position = "none")
+```
+
