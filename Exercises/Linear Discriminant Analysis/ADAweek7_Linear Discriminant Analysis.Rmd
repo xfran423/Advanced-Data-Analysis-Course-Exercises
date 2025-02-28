@@ -1,0 +1,427 @@
+---
+title: "Week_7_LDA"
+author: "Xavier Francis"
+date: "2025-02-24"
+output: html_document
+---
+
+
+#Resources
+LDA general background: https://www.r-bloggers.com/2024/02/understanding-linear-discriminant-analysis-lda/
+
+
+# What is LDA?
+
+LDA is another dimension reduction tool, but is more focused on grouping data into categories than PCA (which can visualize groupings but doesn't test them directly). LDA uses machine learning to train a model on your data, and then test different data to see how well the model now performs. LDA needs data that has some sort of categorical grouping label (like "species") that it can use to group data. LDA can work on data with only two groups, but can also work with data with more than two groups.
+
+
+From https://www.r-bloggers.com/2024/02/understanding-linear-discriminant-analysis-lda/:
+Linear discriminant analysis is a supervised learning technique, as it requires the class labels of the training data to learn the discriminant function.
+
+
+From https://www.ibm.com/think/topics/linear-discriminant-analysis#:~:text=Linear%20discriminant%20analysis%2C%20also%20known,to%20classify%20new%20data%20points.: 
+
+Linear discriminant analysis (LDA) is an approach used in supervised machine learning to solve multi-class classification problems. LDA separates multiple classes with multiple features through data dimensionality reduction. This technique is important in data science as it helps optimize machine learning models.
+
+Linear discriminant analysis, also known as normal discriminant analysis (NDA) or discriminant function analysis (DFA), follows a generative model framework. This means LDA algorithms model the data distribution for each class and use Bayes' theorem to classify new data points. Bayes calculates conditional probabilities—the probability of an event given some other event has occurred. LDA algorithms make predictions by using Bayes to calculate the probability of whether an input data set will belong to a particular output. For a review of Bayesian statistics and how it impacts supervised learning algorithms, see Naïve Bayes classifiers.
+
+LDA works by identifying a linear combination of features that separates or characterizes two or more classes of objects or events. LDA does this by projecting data with two or more dimensions into one dimension so that it can be more easily classified. The technique is, therefore, sometimes referred to as dimensionality reduction. This versatility ensures that LDA can be used for multi-class data classification problems, unlike logistic regression, which is limited to binary classification. LDA is thus often applied to enhance the operation of other learning classification algorithms such as decision tree, random forest or support vector machines (SVM).
+
+# LDA assumptions
+From: https://www.r-bloggers.com/2024/02/understanding-linear-discriminant-analysis-lda/
+
+These assumptions are important to ensure that LDA can produce accurate and reliable results. However, LDA can also perform well even if some assumptions are violated, depending on the data and the problem.
+
+- The values of each predictor variable follow a normal distribution. If we created a histogram to visualize the data distribution for a particular predictor, it would essentially follow the “bell shape.”
+
+- All predictor variables have the same variance. It is rarely the case in real-world data, thus we usually scale each variable to have the same mean and variance before building an LDA model.
+
+- The features are independent of each other. It means that there is no correlation or dependence between the features and that the covariance matrix of the data is diagonal.
+
+- The classes are linearly separable. It means that a linear decision boundary can accurately classify the different classes.
+
+These assumptions are important to ensure that analysis can produce accurate and reliable results. However, it can also perform well even if some assumptions are violated, depending on the data and the problem. It can also be modified to handle cases where the number of features exceeds the number of observations, called the small sample size (SSS) problem. It can be done using regularization techniques, such as shrinkage or penalization.
+
+
+
+#Load packages
+```{r}
+library(tidyverse)
+library(palmerpenguins)
+library(car)
+library(ggbiplot)
+library(factoextra)
+library(caret) #for machine learning workflow
+library(MASS)
+```
+#CLEAN DATA
+## Rename with shorter column names
+https://rpubs.com/friendly/penguin-biplots
+```{r}
+#data(penguins, package="palmerpenguins")
+glimpse(penguins)
+
+peng <- penguins %>%
+    rename(
+         bill_length = bill_length_mm, 
+         bill_depth = bill_depth_mm, 
+         flipper_length = flipper_length_mm, 
+         body_mass = body_mass_g
+         ) %>%
+  mutate(species = as.factor(species),
+         island = as.factor(island),
+         sex = as.factor(substr(sex,1,1))) %>%
+  filter(!is.na(bill_depth))
+
+glimpse(peng)
+```
+
+## Clean up data by removing NAs. Here were just getting rid of any rows with NAs
+```{r}
+# Get rid of missing values
+peng.noNA <- peng %>% drop_na()
+
+
+#check
+nrow(peng)
+nrow(peng.noNA)
+```
+# Data partitioning
+Code adapted from: https://www.sthda.com/english/articles/36-classification-methods-essentials/146-discriminant-analysis-essentials-in-r/
+Typical partition for machine learning is 80% training, 20% testing
+```{r}
+# Split the data into training (80%) and test set (20%)
+set.seed(42)
+training.samples <- peng.noNA$species %>%
+                                caret::createDataPartition(p = 0.8, 
+                                                           list = FALSE)
+
+train.data <- peng.noNA[training.samples, ]
+test.data <- peng.noNA[-training.samples, ]
+
+#check the partitions
+nrow(train.data)
+nrow(test.data)
+
+
+```
+
+#LDA tutorial
+https://www.statology.org/linear-discriminant-analysis-in-r/
+
+## Rescale the data
+```{r}
+# Estimate preprocessing parameters
+preproc.param <- train.data %>% 
+  preProcess(method = c("center", "scale"))
+# Transform the data using the estimated parameters
+train.transformed <- preproc.param %>% predict(train.data)
+test.transformed <- preproc.param %>% predict(test.data)
+```
+
+
+
+
+## Fit LDA & plot
+interpretation: adapted from https://www.statology.org/linear-discriminant-analysis-in-r/
+
+Prior probabilities of group: These represent the proportions of each Species in the training set. For example, 44% of all observations in the training set were of species Adelie.
+
+Group means: These display the mean values for each predictor variable for each species.
+
+Coefficients of linear discriminants: These display the linear combination of predictor variables that are used to form the decision rule of the LDA model. 
+
+Proportion of trace: These display the percentage separation achieved by each linear discriminant function.
+
+```{r}
+# Fit a lda Model 
+model <- MASS::lda(species ~ ., data = train.transformed) 
+
+#see full output of LDA model
+model
+
+```
+
+### Basic plot of LDA results for training data
+```{r}
+# Make a basic plot of the training data
+plot(model)
+```
+
+## Confusion matrix and accuracy – training data
+See: https://www.r-bloggers.com/2021/05/linear-discriminant-analysis-in-r/
+```{r}
+p1 <- predict(model, train.transformed)$class
+tab <- table(Predicted = p1, Actual = train.transformed$species)
+tab
+
+# proportion correct assignments
+sum(diag(tab))/sum(tab)
+```
+
+## Test partitioned data after training
+```{r}
+# Predict species in the TEST data parition
+predicted <- predict(model, newdata = test.transformed) 
+
+names(predicted)
+
+#view predicted class for first six observations in test set
+head(predicted$class)
+```
+
+
+Interpretation (from https://www.statology.org/linear-discriminant-analysis-in-r/)
+
+This returns a list with three variables:
+
+class: The predicted class
+posterior: The posterior probability that an observation belongs to each class
+x: The linear discriminants
+We can quickly view each of these results for the first six observations in our test dataset:
+
+#view predicted class for first six observations in test set
+head(predicted$class)
+
+## Investigate the accuracy of the model
+
+### Confusion matrix and accuracy – test data
+See: https://www.r-bloggers.com/2021/05/linear-discriminant-analysis-in-r/
+```{r}
+p2 <- predict(model, test.transformed)$class
+tab1 <- table(Predicted = p2, Actual = test.transformed$species)
+tab1
+
+# proportion correct assignments
+sum(diag(tab1))/sum(tab1)
+```
+
+## Generate a confusion matrix to see how test data were assigned to species
+```{r}
+confusionMatrix(predicted$class, test.transformed$species) 
+
+#save the confusion matrix as a new object
+output.confusionMX <- confusionMatrix(predicted$class, test.transformed$species) 
+
+```
+
+
+
+### Interpreting confusion matrix
+Advice from: https://stackoverflow.com/questions/60858241/how-to-interpret-confusion-matrix-in-r 
+
+Adapted for the penguin example: Reference is the real class and Prediction is the predicted class. Where you have 29 Reference Adelie and Prediction Adelie, that is True Positive, because all of those were correctly identified as what they are Adelie. If you look at all of the values greater than Zero in the Reference Adelie column other than the first cell, those are False Negatives, because they are Adelie's falsely predicted to be other classes (there aren't any in the penguins). If you look at all of the non-zero values in the Prediction Row Adelie other than Reference Adelie, those are False Positives for Adelie. 
+
+
+
+```{r}
+#find where the confusion matrix is stored
+names(output.confusionMX)
+
+#show just the confusion matrix
+output.confusionMX$table
+
+```
+### Extracting kappa
+Advice from: https://stackoverflow.com/questions/60858241/how-to-interpret-confusion-matrix-in-r 
+
+What does the kappa represent?
+"It is cohen's kappa, basically a metric that measures how good your predictions are compared to random guessing / assignment."
+```{r}
+output.confusionMX$overall
+output.confusionMX$overall[2]
+
+```
+### Extracting the accuracy of the model
+```{r}
+output.confusionMX$overall
+output.confusionMX$overall[1]
+```
+Whats the difference between the accuracy & kappa?
+Advice from: https://stackoverflow.com/questions/60858241/how-to-interpret-confusion-matrix-in-r 
+"As you can see from the formula, it makes a huge difference when your dataset is imbalanced. For example, if 90% of your labels are one class, if the model predicts everything to be that class you get 90% Accuracy. However if you use cohen's kappa, p expected is 0.9 to start with and you need to go better than that to show a good score."
+
+
+### Extracting p-value for accuracy
+```{r}
+output.confusionMX$overall
+output.confusionMX$overall[6]
+
+accuracy.pval <- as.numeric(output.confusionMX$overall[6])
+
+#different way to view the p value 
+format(accuracy.pval, scientific = FALSE)
+```
+
+
+
+
+#same procedure with modifying how much of our data is used for training vs testing
+
+# Data partitioning
+Code adapted from: https://www.sthda.com/english/articles/36-classification-methods-essentials/146-discriminant-analysis-essentials-in-r/
+Typical partition for machine learning is 80% training, 20% testing
+```{r}
+# Split the data into training (80%) and test set (20%)
+set.seed(42)
+training.samples <- peng.noNA$species %>%
+                                caret::createDataPartition(p = 0.5, 
+                                                           list = FALSE)
+
+train.data <- peng.noNA[training.samples, ]
+test.data <- peng.noNA[-training.samples, ]
+
+#check the partitions
+nrow(train.data)
+nrow(test.data)
+
+
+```
+
+#LDA tutorial
+https://www.statology.org/linear-discriminant-analysis-in-r/
+
+## Rescale the data
+```{r}
+# Estimate preprocessing parameters
+preproc.param <- train.data %>% 
+  preProcess(method = c("center", "scale"))
+# Transform the data using the estimated parameters
+train.transformed <- preproc.param %>% predict(train.data)
+test.transformed <- preproc.param %>% predict(test.data)
+```
+
+
+
+
+## Fit LDA & plot
+interpretation: adapted from https://www.statology.org/linear-discriminant-analysis-in-r/
+
+Prior probabilities of group: These represent the proportions of each Species in the training set. For example, 44% of all observations in the training set were of species Adelie.
+
+Group means: These display the mean values for each predictor variable for each species.
+
+Coefficients of linear discriminants: These display the linear combination of predictor variables that are used to form the decision rule of the LDA model. 
+
+Proportion of trace: These display the percentage separation achieved by each linear discriminant function.
+
+```{r}
+# Fit a lda Model 
+model <- MASS::lda(species ~ ., data = train.transformed) 
+
+#see full output of LDA model
+model
+
+```
+
+### Basic plot of LDA results for training data
+```{r}
+# Make a basic plot of the training data
+plot(model)
+```
+
+## Confusion matrix and accuracy – training data
+See: https://www.r-bloggers.com/2021/05/linear-discriminant-analysis-in-r/
+```{r}
+p1 <- predict(model, train.transformed)$class
+tab <- table(Predicted = p1, Actual = train.transformed$species)
+tab
+
+# proportion correct assignments
+sum(diag(tab))/sum(tab)
+```
+
+## Test partitioned data after training
+```{r}
+# Predict species in the TEST data parition
+predicted <- predict(model, newdata = test.transformed) 
+
+names(predicted)
+
+#view predicted class for first six observations in test set
+head(predicted$class)
+```
+
+
+Interpretation (from https://www.statology.org/linear-discriminant-analysis-in-r/)
+
+This returns a list with three variables:
+
+class: The predicted class
+posterior: The posterior probability that an observation belongs to each class
+x: The linear discriminants
+We can quickly view each of these results for the first six observations in our test dataset:
+
+#view predicted class for first six observations in test set
+head(predicted$class)
+
+## Investigate the accuracy of the model
+
+### Confusion matrix and accuracy – test data
+See: https://www.r-bloggers.com/2021/05/linear-discriminant-analysis-in-r/
+```{r}
+p2 <- predict(model, test.transformed)$class
+tab1 <- table(Predicted = p2, Actual = test.transformed$species)
+tab1
+
+# proportion correct assignments
+sum(diag(tab1))/sum(tab1)
+```
+
+## Generate a confusion matrix to see how test data were assigned to species
+```{r}
+confusionMatrix(predicted$class, test.transformed$species) 
+
+#save the confusion matrix as a new object
+output.confusionMX <- confusionMatrix(predicted$class, test.transformed$species) 
+
+```
+
+
+
+### Interpreting confusion matrix
+Advice from: https://stackoverflow.com/questions/60858241/how-to-interpret-confusion-matrix-in-r 
+
+Adapted for the penguin example: Reference is the real class and Prediction is the predicted class. Where you have 29 Reference Adelie and Prediction Adelie, that is True Positive, because all of those were correctly identified as what they are Adelie. If you look at all of the values greater than Zero in the Reference Adelie column other than the first cell, those are False Negatives, because they are Adelie's falsely predicted to be other classes (there aren't any in the penguins). If you look at all of the non-zero values in the Prediction Row Adelie other than Reference Adelie, those are False Positives for Adelie. 
+
+
+
+```{r}
+#find where the confusion matrix is stored
+names(output.confusionMX)
+
+#show just the confusion matrix
+output.confusionMX$table
+
+```
+### Extracting kappa
+Advice from: https://stackoverflow.com/questions/60858241/how-to-interpret-confusion-matrix-in-r 
+
+What does the kappa represent?
+"It is cohen's kappa, basically a metric that measures how good your predictions are compared to random guessing / assignment."
+```{r}
+output.confusionMX$overall
+output.confusionMX$overall[2]
+
+```
+### Extracting the accuracy of the model
+```{r}
+output.confusionMX$overall
+output.confusionMX$overall[1]
+```
+Whats the difference between the accuracy & kappa?
+Advice from: https://stackoverflow.com/questions/60858241/how-to-interpret-confusion-matrix-in-r 
+"As you can see from the formula, it makes a huge difference when your dataset is imbalanced. For example, if 90% of your labels are one class, if the model predicts everything to be that class you get 90% Accuracy. However if you use cohen's kappa, p expected is 0.9 to start with and you need to go better than that to show a good score."
+
+
+### Extracting p-value for accuracy
+```{r}
+output.confusionMX$overall
+output.confusionMX$overall[6]
+
+accuracy.pval <- as.numeric(output.confusionMX$overall[6])
+
+#different way to view the p value 
+format(accuracy.pval, scientific = FALSE)
+```
+
