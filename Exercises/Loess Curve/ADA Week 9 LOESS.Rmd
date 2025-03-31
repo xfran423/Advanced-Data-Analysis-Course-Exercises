@@ -1,0 +1,273 @@
+---
+title: "Week 09 LOESS"
+author: "Xavier Francis"
+date: "2025-03-10"
+output: html_document
+---
+
+What do you do if your data are nonlinear?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lattice)
+library(broom) #make nice summary outputs
+library(rvest) #webscraping
+library(lubridate) #handle dates/times
+#install.packages("ggfortify")
+library(ggfortify)
+
+```
+# Plot example data "ethanol"
+https://search.r-project.org/CRAN/refmans/SemiPar/html/ethanol.html
+"The ethanol data frame contains 88 sets of measurements for variables from an experiment in which ethanol was burned in a single cylinder automobile test engine."
+
+NOx=nitrogen oxide
+E=Ethanol
+
+```{r}
+head(ethanol)
+
+#plot just the points
+ggplot(ethanol, aes(E, NOx)) +
+  geom_point()
+
+```
+#add regression line to the plot
+
+```{r}
+ggplot(ethanol, aes(E, NOx)) +
+  geom_point() + 
+  geom_smooth(method='lm')
+
+
+
+# run a regression
+lmfit <- lm(NOx ~ E, ethanol)
+summary(lmfit)
+```
+
+## Use broom package to view a nicer layout of the regression results
+```{r}
+broom::tidy(lmfit)
+broom::glance(lmfit)
+
+```
+## Check diagnostics to assess linearity
+
+```{r}
+autoplot(lmfit)
+
+```
+From: https://www.sthda.com/english/articles/39-regression-model-diagnostics/161-linear-regression-assumptions-and-diagnostics-in-r-essentials/
+
+"The diagnostic plots show residuals in four different ways:
+
+Residuals vs Fitted. Used to check the linear relationship assumptions. A horizontal line, without distinct patterns is an indication for a linear relationship, what is good.
+
+Normal Q-Q. Used to examine whether the residuals are normally distributed. It’s good if residuals points follow the straight dashed line.
+
+Scale-Location (or Spread-Location). Used to check the homogeneity of variance of the residuals (homoscedasticity). Horizontal line with equally spread points is a good indication of homoscedasticity. This is not the case in our example, where we have a heteroscedasticity problem.
+
+Residuals vs Leverage. Used to identify influential cases, that is extreme values that might influence the regression results when included or excluded from the analysis. This plot will be described further in the next sections."
+
+
+CONCLUSION: NONLINEAR
+
+
+
+# LOESS Regression
+
+A LOESS/LOWESS (Locally Weighted Scatter-plot Smoother) regression involves fitting a smooth curve between two or more points in a series.
+
+
+## Animation of fitting loess curves
+
+http://varianceexplained.org/files/loess.html
+
+
+
+# LOESS example
+```{r}
+#set the ggplot theme to black and white
+theme_set(theme_bw())
+
+#do a loess fit
+mod <- loess(NOx ~ E, ethanol, degree = 1, span = 0.5)
+summary(mod)
+
+#add information to the model with augment
+fit <- broom::augment(mod)
+fit
+
+ggplot(fit, aes(E, NOx)) +
+  geom_point() +
+  geom_line(aes(y = .fitted), color = "red")
+
+
+```
+# Weather data example
+
+## Scrape yesterday's weather data
+```{r}
+col_link <- "https://www.wunderground.com/dashboard/pws/KTXDRIPP119/table/2025-03-09/2025-03-09/daily"
+col_page <- read_html(col_link)
+
+ds.weather <- col_page %>% html_nodes("table.history-table.desktop-table") %>%
+  html_table() %>%.[[1]]
+
+
+#make temperature numeric
+ds.weather$temp <- as.numeric(substr(ds.weather$Temperature,1,nchar(ds.weather$Temperature)-3))
+
+
+ggplot(ds.weather, aes(x=Time, y=temp))+
+         geom_point()
+
+
+```
+
+# Fix time formatting
+```{r}
+
+#extract just the morning data
+ds.weatherAM <- ds.weather[grepl("AM", ds.weather$Time), , drop = FALSE]
+
+
+#make a decimal version of the time
+t_hm <- lubridate::hm(ds.weatherAM$Time)
+t_hm_dec <- lubridate::hour(t_hm) + lubridate::minute(t_hm)/60
+
+ds.weatherAM$dec.time <- t_hm_dec
+
+#view decimal time vs original time
+ds.weatherAM[,c(1,14)]
+```
+
+## Plot
+```{r}
+ggplot(ds.weatherAM, aes(x=dec.time, y=temp))+
+         geom_point()
+```
+## fix 12AM issue
+```{r}
+ds.weatherAM$dec.time <- ifelse(ds.weatherAM$dec.time>=12, ds.weatherAM$dec.time-12, ds.weatherAM$dec.time)
+```
+
+
+
+## Plot temp data with decimal time, 12AM issue fixed
+```{r}
+ggplot(ds.weatherAM, aes(x=dec.time, y=temp))+
+         geom_point()+
+         geom_line()
+```
+
+## Add linear model to plot
+```{r}
+# run a regression
+lmfit <- lm(temp ~ dec.time, ds.weatherAM) #formula y~x, data
+summary(lmfit)
+
+# Use broom package to view a nicer layout of the regression results
+summary <- broom::glance(lmfit)
+format(summary$p.value,scientific = FALSE)
+round(summary$p.value, 4)
+
+#use ifelse to get nice p-value for plot title
+pval <- ifelse(round(summary$p.value, 4)>0, round(summary$p.value, 4), "<0.0001")
+
+ggplot(ds.weatherAM, aes(x=dec.time, y=temp))+
+         geom_point()+
+         geom_line() +
+        geom_smooth(method='lm') +
+        labs(title=paste0("Linear regression R2=", round(summary$r.squared,2), " (p-value", pval, ")"))
+```
+
+# Fit a smoothed line with LOESS
+```{r}
+#do a loess fit
+mod <- loess(temp ~ dec.time, ds.weatherAM, degree = 1, span = 0.75)
+summary(mod)
+
+#add information to the model with augment
+fit <- broom::augment(mod)
+fit
+
+ggplot(fit, aes(dec.time, temp)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method='lm') +
+  geom_line(aes(y = .fitted), color = "red")+
+  labs(title="Black=observed data, Blue=linear regression fit, Red=LOESS fit (span 0.75)")
+```
+
+
+
+# Loop to find 5 spans
+
+Plan: Create vector of spans
+Create empty df that we can store results into
+within the loop:
+do the loess fit for the particualar span
+add the extra information to the model with augment
+add a new column with a span ID
+rbind the data frame onto the master dataframe
+end loop
+convert span ID into a character for plotting purposes
+plot spans
+
+```{r}
+# KEY
+#specify vectors of spans
+spans <- c(.9,.75,.6,.5,.4)
+
+
+# make blank dataframe to write loop output into
+span_df <- data.frame()
+
+
+# LOOP
+#do a loess fit
+  for (i in 1:length(spans)){
+
+#loess fit     
+mod<- loess(temp ~ dec.time, ds.weatherAM, degree = 1, span = spans[i])
+
+#add information to the model with augment
+fit <- broom::augment(mod)
+#add column of spans to differentiate data for each span
+fit$spanID <- spans[i]
+#bind span specific loop dataframe to the master dataframe
+span_df <- rbind(span_df, fit)
+    
+  }
+    
+#convert span to a character for plotting
+span_df$spanID <- as.character(span_df$spanID ) 
+
+
+# Show written data
+glimpse(span_df)
+```
+
+
+#plot the data with the various spans
+```{r}
+
+#plot the data
+ ggplot(span_df, aes(dec.time, temp, group = spanID)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method='lm') +
+  geom_line(aes(y = .fitted, group = spanID, colour = spanID), linewidth = 1)+
+  labs(title="Black=observed data, Blue=linear regression fit, Multicolors=spans")
+   
+```
+
+
+
+
+#span .4 seems to fit the original data the closest
+
+
