@@ -1,0 +1,203 @@
+---
+title: "ADA week 11 curve overlap"
+author: "Xavier Francis"
+date: "2025-03-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(overlap) #camera trap methods
+library(png)
+library(RCurl) #pull images from links
+library(emdist)
+library(rphylopic)
+```
+
+
+
+```{r}
+# view package's data
+data("kerinci")
+head(kerinci)
+unique(kerinci$Sps)
+
+# Convert time to radians
+timeRad <- kerinci$Time * 2 * pi
+
+# Filter species and time
+tig2 <- timeRad[kerinci$Zone == 2 & kerinci$Sps == 'tiger']
+mac2 <- timeRad[kerinci$Zone == 2 & kerinci$Sps == 'macaque']
+
+# Create density overlap plot with 'Overlap' package plot
+overlapPlot(tig2, mac2, main="Zone 2")
+
+
+```
+
+
+
+# Find overlap
+From:
+Dhat5 simply checks which curve is higher at each point; even tiny changes in the data can result in
+large, discontinuous changes in Dhat5, and it can take values > 1. Don’t use Dhat5.
+
+Comparing curves at times of actual observations works well if there are enough observations of
+each species. Simulations show that Dhat4 is best when the smallest sample has at least 50 observations. Dhat1 compares curves at n.grid equally spaced points, and is best for small samples.
+```{r}
+overlapEst(tig2, mac2)
+
+tigVSmac <- as.numeric(overlapEst(tig2, mac2, type="Dhat4"))
+
+```
+
+
+#convert to a ggplot
+```{r}
+# Create df of tig and mac density and time values
+tigmac <- overlapPlot(tig2, mac2, main="Zone 2")
+
+
+ggplot(tigmac, aes(x)) +
+  geom_area(aes(y = pmin(densityA, densityB)),
+            alpha = 0.3) +
+  geom_line(aes(y = densityA, color = "Tiger")) +
+  geom_line(aes(y = densityB, color = "Macaque")) +
+  labs(x="Time", y="Density") +
+  theme(panel.border = element_rect(color = "black", fill=NA, linewidth=0.5))
+```
+
+
+
+# Earth mover's distance
+From: http://infolab.stanford.edu/pub/cstr/reports/cs/tr/99/1620/CS-TR-99-1620.ch4.pdf
+The Earth Mover's Distance (EMD) between two distributions is proportional to the minimum amount of work required to change one distribution into the other. Here one unit of work is defined as the amount of work necessary to move one unit of weight by one unit of distance. The distance measure between weight locations is known as the ground distance. The morphing process between equal-weight distributions can be visualized as weight flowing from one distribution to the other until the distributions are identical.
+
+Liz: R package emdist calculates Earth Mover's Distance - data need to be in MATRIX format prior to calculating!
+
+```{r}
+tigmac
+tiger.curve <- as.matrix(tigmac[,c(2,1)])
+macaque.curve <- as.matrix(tigmac[,c(3,1)])
+
+tigVmac_em <- emdist::emd(tiger.curve, macaque.curve)
+
+```
+
+
+
+```{r}
+unique(kerinci$Sps)
+mun2 <- timeRad[kerinci$Zone == 2 & kerinci$Sps == 'muntjac']
+
+
+# Create density overlap plot with 'Overlap' package plot
+overlapPlot(tig2, mun2, main="Zone 2")
+
+# Create df of tig and mac density and time values
+tigmun <- overlapPlot(tig2, mun2, main="Zone 2")
+tigVSmun <- as.numeric(overlapEst(tig2, mun2, type="Dhat4"))
+  
+muntjac.curve <- as.matrix(tigmun[,c(3,1)])
+
+tigVmun_em <- emdist::emd(tiger.curve, muntjac.curve)
+```
+
+
+
+# Add species icons
+Sumatran tiger Panthera tigris sondaica
+pig-tailed macaque Macaca nemestrina or long-tailed macaque Macaca fascicularis
+
+https://www.phylopic.org/
+Tiger: https://images.phylopic.org/images/9b08d795-bf7f-4371-b120-5ebd46b24ce8
+Macaque: https://images.phylopic.org/images/d98c79cf-4ca5-4af8-91d2-9a3e51617360 
+
+```{r}
+#import phylopic by uuid
+tiger.uuid <- "9b08d795-bf7f-4371-b120-5ebd46b24ce8"
+macaque.uuid <- "d98c79cf-4ca5-4af8-91d2-9a3e51617360"
+
+
+tigVmac <- ggplot(tigmac, aes(x)) +
+  geom_area(aes(y = pmin(densityA, densityB)),
+            alpha = 0.3) +
+  geom_line(aes(y = densityA, color = "Tiger")) +
+  geom_line(aes(y = densityB, color = "Macaque")) +
+  theme(panel.border = element_rect(color = "black", fill=NA, linewidth=0.5)) +
+  labs(x="Time", 
+       y="Density", 
+       title=paste0("Overlap in tiger & macaque activity =", round(tigVSmac, 2))) +
+  add_phylopic(uuid = tiger.uuid,
+               x = 2, y = 0.075, height = 0.015)+
+  add_phylopic(uuid = macaque.uuid,
+               x = 10, y = 0.115, height = 0.015)
+
+tigVmac
+```
+
+
+
+https://www.phylopic.org/images/3cf49afe-17b4-4889-a3f4-32cb44d3e969/mazama-temama
+```{r}
+#import phylopic by uuid
+tiger.uuid <- "9b08d795-bf7f-4371-b120-5ebd46b24ce8"
+muntjac.uuid <- "3cf49afe-17b4-4889-a3f4-32cb44d3e969"
+
+
+  
+tigVmun <- ggplot(tigmun, aes(x)) +
+  geom_area(aes(y = pmin(densityA, densityB)),
+            alpha = 0.3) +
+  geom_line(aes(y = densityA, color = "Tiger")) +
+  geom_line(aes(y = densityB, color = "Muntjac")) +
+  theme(panel.border = element_rect(color = "black", fill=NA, linewidth=0.5)) +
+  labs(x="Time", 
+       y="Density", 
+       title=paste0("Overlap in tiger & muntjac activity =", round(tigVSmun, 2))) +
+  add_phylopic(uuid = tiger.uuid,
+               x = 2, y = 0.075, height = 0.015)+
+  add_phylopic(uuid = muntjac.uuid,
+               x = 10, y = 0.115, height = 0.015)
+
+tigVmun
+```
+
+```{r}
+macmun <- overlapPlot(mac2, mun2, main="Zone 2")
+macVSmun <- as.numeric(overlapEst(mac2, mun2, type="Dhat4"))
+  
+macVmun_em <- emdist::emd(macaque.curve, muntjac.curve)
+
+macVmun <- ggplot(macmun, aes(x)) +
+  geom_area(aes(y = pmin(densityA, densityB)),
+            alpha = 0.3) +
+  geom_line(aes(y = densityA, color = "Macaque")) +
+  geom_line(aes(y = densityB, color = "Muntjac")) +
+  theme(panel.border = element_rect(color = "black", fill=NA, linewidth=0.5)) +
+  labs(x="Time", 
+       y="Density", 
+       title=paste0("Overlap in macaque & muntjac activity =", round(macVSmun, 2))) +
+  add_phylopic(uuid = macaque.uuid,
+               x = 17, y = 0.075, height = 0.015)+
+  add_phylopic(uuid = muntjac.uuid,
+               x = 5.5, y = 0.115, height = 0.015)
+macVmun
+
+```
+
+# Combine into 3-panel plot
+```{r, fig.height=10, fig.width=5}
+library(gridExtra)
+
+
+gridExtra::grid.arrange(tigVmac, tigVmun, macVmun, ncol = 1)
+```
+
+
