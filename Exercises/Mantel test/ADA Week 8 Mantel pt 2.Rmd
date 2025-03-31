@@ -1,0 +1,133 @@
+---
+title: "ADA Week 8 pt 2"
+author: "Xavier Francis"
+date: "2025-03-04"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#How to perform a mantel test in R using an alternate package, in this case the ade4 package
+https://stats.oarc.ucla.edu/r/faq/how-can-i-perform-a-mantel-test-in-r/
+
+#I adapted the code from the link above to practice using the ade4 package for mantel testing
+#Below is a description of what a mantel test is and an introduction to the data used
+
+#What is a mantel test?
+A Mantel test measures the correlation between two matrices typically containing measures of distance.  A Mantel test is one way of testing for spatial autocorrelation.  Using functions in the ade4 library, we can perform a Mantel test in R.  To download and load this library, enter install.packages("ade4") and then library(ade4).  There are other Mantel test functions available in other R libraries and our choice of this library’s should not be seen as an endorsement in any way.
+
+Let’s look at an example. Our dataset, ozone, contains ozone measurements from thirty-two locations in the Los Angeles area aggregated over one month. The dataset includes the station number (Station), the latitude and longitude of the station (Lat and Lon), and the average of the highest eight hour daily averages (Av8top). We will be interested in testing if the differences in ozone measurements are smaller for stations that are closer together than for stations that are far apart.  This data, and other spatial datasets, can be downloaded from the University of Illinois’s Spatial Analysis Lab. We can look at a summary of our location variables to see the range of locations under consideration.
+# Load packages
+```{r}
+#install.packages("ade4")
+library(ade4)
+library(ggplot2)
+```
+
+#Load in the data and check first 10 rows
+```{r}
+ozone <- read.table("https://stats.idre.ucla.edu/stat/r/faq/ozone.csv", sep=",", header=T)
+head(ozone, n=10)
+```
+
+
+To run a Mantel test, we will need to generate two distance matrices: one containing spatial distances and one containing distances between measured outcomes at the given points.  In the spatial distance matrix, entries for pairs of points that are close together are lower than for pairs of points that are far apart.  In the measured outcome matrix, entries for pairs of locations with similar outcomes are lower than for pairs of points with dissimilar outcomes.  We do this using the dist function.  The Mantel test function will require objects of this “distance” class.
+```{r}
+#Here we are generate our 2 distance matrices
+station.dists <- dist(cbind(ozone$Lon, ozone$Lat))
+ozone.dists <- dist(ozone$Av8top)
+
+#convert to matrix
+as.matrix(station.dists)[1:5, 1:5]
+as.matrix(ozone.dists)[1:5, 1:5]
+
+```
+
+
+These are the two matrices which the function will be testing for a correlation.  The test consists of calculating the correlation of the entries in the matrices, then permuting the matrices and calculating the same test statistic under each permutation and comparing the original test statistic to the distribution of test statistics from the permutations to generate a p-value. The number of permutations defines the precision with which the p-value can be calculated.  The function to perform the Mantel test is mantel.rtest and the required arguments are the two distance matrices.  The number of permutations can also be specified by the user, but is by default 99.
+
+```{r}
+#mantel test
+mantel.rtest(station.dists, ozone.dists, nrepet = 9999)
+
+```
+#After running my mantel test I ended up getting the same results as the tutorial in terms of r and p value if rounded. The r is positive, indicating a possitive association, and the p value is less than .05, indicating that its a stronger asscociation than random chance. Howveer, because the r value is so small, this relationship may not be biologically relevant. Theres some indication that there is an association, but its seems to be very weak
+
+
+Based on these results, we can reject the null hypothesis that these two matrices, spatial distance and ozone distance, are unrelated with alpha = .05. The observed correlation, r = 0.1636308, suggests that the matrix entries are positively associated.  So smaller differences in ozone are generally seen among pairs of stations that are close to each other than far from each other. Note that since this test is based on random permutations, the same code will always arrive at the same observed correlation but rarely the same p-value.
+
+
+#extract r and p values
+```{r}
+mtr <- mantel.rtest(station.dists, ozone.dists, nrepet = 9999)
+mtr
+names(mtr)
+mtr$pvalue
+mtr$obs
+mtr$rep
+
+```
+## Plot results
+#rather than using ggplot, I used "plot". This is because when extracting the names of everying stored within my mantel results, tehre was already a plot object within
+```{r}
+#plot mantel results as a histogram
+plot(mtr)
+
+```
+
+
+#Alternative version of plotting the mantel results using ggplot 
+https://stackoverflow.com/questions/64749139/plot-mantel-rtest-with-ggplot2
+```{r}
+ggplot_mantel <- function(mtr, fill = "lightgray") {
+  df <- data.frame(x = mtr$plot$hist$mids,
+                   y = mtr$plot$hist$counts)
+  ggplot(df, aes(x, y)) + 
+    geom_col(orientation = "x", 
+             width = diff(mtr$plot$hist$breaks)[1],
+             fill = fill, color = "black") +
+    labs(x ="perms", y = "count") +
+    scale_x_continuous(limits = mtr$plot$xlim) +
+  geom_vline(xintercept=mtr$obs, color="red")+
+  labs(title=paste0("Mantel test results: ", "p = ", mtr$pvalue, " r = ",mtr$obs))+
+  theme(panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5)) +
+          geom_vline(xintercept=mean(rep(df$x, df$y)), color="black", lty=2)
+
+  
+
+}
+
+
+
+ggplot_mantel(mtr)
+
+```
+
+
+
+
+## Use vegan version of mantel test
+```{r}
+
+mantel.result <- vegan::mantel(station.dists, ozone.dists, method="pearson", permutations=1000)
+mantel.result
+names(mantel.result)
+
+#extract r and p-values from results
+mantel.result$statistic
+result.label <- paste0("R=", mantel.result$statistic, ", p-value=", round(mantel.result$signif,4))
+result.label
+```
+#After running both the vegan and ade4 versions of the mantel test, I got virtually identical p and r values between the two, though the vegan version seems to round to fewer decimal points. The vegan version displays the quantiles of the null model, which the ade4 version does not, and the ade4 version shows the std observation, expectation, and variance, which the vegan version does not. Also, interestingly, the vegan version seems to permute the data 1000 times, while the ade4 version does 9999 permuations, which is almost 10 times more than the vergan version.
+
+
+
+
+
+
+
+
+
